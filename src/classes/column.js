@@ -68,10 +68,10 @@
     };
 
     self.showSortButtonUp = ko.computed(function () {
-        return self.sortable ? self.sortDirection() === DESC : self.sortable;
+        return self.sortable ? self.sortDirection() === ASC : self.sortable;
     });
     self.showSortButtonDown = ko.computed(function () {
-        return self.sortable ? self.sortDirection() === ASC : self.sortable;
+        return self.sortable ? self.sortDirection() === DESC : self.sortable;
     });     
     self.noSortVisible = ko.computed(function () {
         return !self.sortDirection();

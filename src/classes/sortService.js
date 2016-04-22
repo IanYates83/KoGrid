@@ -227,6 +227,8 @@ window.kg.sortService = {
         unwrappedData.sort(function (itemA, itemB) {
             var propA = window.kg.utils.evalProperty(itemA, col.field);
             var propB = window.kg.utils.evalProperty(itemB, col.field);
+			if (col.cellFilter) propA = col.cellFilter(propA);
+			if (col.cellFilter) propB = col.cellFilter(propB);
             // we want to force nulls and such to the bottom when we sort... which effectively is "greater than"
             if (!propB && !propA) {
                 return 0;
@@ -236,11 +238,11 @@ window.kg.sortService = {
                 return -1;
             }
             //made it this far, we don't have to worry about null & undefined
-            if (direction === ASC) {
-                return sortFn(propA, propB);
-            } else {
-                return 0 - sortFn(propA, propB);
+            var res = sortFn(propA, propB, direction)|0;
+            if (direction !== ASC) {
+                res = 0 - res;
             }
+			return res;
         });
         data(unwrappedData);
         return;

@@ -2,7 +2,7 @@
 * koGrid JavaScript Library
 * Authors: https://github.com/ericmbarnard/koGrid/blob/master/README.md
 * License: MIT (http://www.opensource.org/licenses/mit-license.php)
-* Compiled At: 12/19/2012 10:15:47
+* Compiled At: 04/22/2016 08:22:30
 ***********************************************/
 
 (function (window) {
@@ -259,6 +259,7 @@ ko.bindingHandlers['koGrid'] = (function () {
             grid.$userViewModel = bindingContext.$data;
             ko.applyBindings(grid, gridElem[0]);
             //walk the element's graph and the correct properties on the grid
+			window.kg.domUtilityService.init();
             window.kg.domUtilityService.AssignGridContainers(elem, grid);
             grid.configureColumnWidths();
             grid.refreshDomSizes();
@@ -271,6 +272,15 @@ ko.bindingHandlers['koGrid'] = (function () {
                 }
             });
             window.kg.domUtilityService.BuildStyles(grid);
+			
+			// Async layout columns after render
+			setTimeout(function () {
+				window.kg.domUtilityService.UpdateGridLayout(grid);
+				if (grid.config.maintainColumnRatios) {
+					grid.configureColumnWidths();
+				}
+			}, 0);
+			
             return { controlsDescendantBindings: true };
         }
     };
@@ -518,7 +528,7 @@ window.kg.Column = function (config, grid) {
     }
     self.sortDirection = ko.observable(undefined);
     self.sortingAlgorithm = colDef.sortFn;
-    self.headerClass = ko.observable(colDef.headerClass);
+    self.headerClass = ko.observable(colDef.headerClass || '');
     self.headerCellTemplate = colDef.headerCellTemplate || window.kg.defaultHeaderCellTemplate();
     self.cellTemplate = colDef.cellTemplate || window.kg.defaultCellTemplate();
     if (colDef.cellTemplate && !TEMPLATE_REGEXP.test(colDef.cellTemplate)) {
@@ -548,10 +558,10 @@ window.kg.Column = function (config, grid) {
     };
 
     self.showSortButtonUp = ko.computed(function () {
-        return self.sortable ? self.sortDirection() === DESC : self.sortable;
+        return self.sortable ? self.sortDirection() === ASC : self.sortable;
     });
     self.showSortButtonDown = ko.computed(function () {
-        return self.sortable ? self.sortDirection() === ASC : self.sortable;
+        return self.sortable ? self.sortDirection() === DESC : self.sortable;
     });     
     self.noSortVisible = ko.computed(function () {
         return !self.sortDirection();
@@ -1348,6 +1358,21 @@ window.kg.Grid = function (options) {
         self.maxCanvasHt(self.calcMaxCanvasHeight());
         self.searchProvider.evalFilter();
         self.refreshDomSizes();
+		
+		// Sort config subscriber and initial use
+		if (self.sortInfo) {
+			var sortObs = function () {
+				if (!self.isSorting) {
+					var si = self.sortInfo.peek();
+					if (si) {
+						self.sortData(si.column, si.direction);
+					}
+				}
+			};
+			
+			self.sortInfo.subscribe(sortObs);
+			setTimeout(sortObs, 0);
+		}
     };
     self.prevScrollTop = 0;
     self.prevScrollIndex = 0;
@@ -1392,18 +1417,37 @@ window.kg.Grid = function (options) {
         window.kg.domUtilityService.BuildStyles(self);
     };
     self.sortData = function (col, direction) {
-        // if external sorting is being used, do nothing.
         self.isSorting = true;
-        self.sortInfo({
-            column: col,
-            direction: direction
-        });
+		if (typeof col !== 'object') {
+			// Can specify sort column by index or name
+			if (typeof col === 'number') {
+				col = self.columns()[col];
+			} else {
+				col = ko.utils.arrayFirst(self.columns(), function (el) {
+					return (el.field === col);
+				});
+			}
+			
+			// Trick column to do the sort
+			if (col) {
+				col.sortDirection(direction.toLowerCase() !== DESC ? DESC : ASC);
+				col.sort();
+			}
+			return;
+		}
+		
+        // if external sorting is being used, do nothing.
+		direction = direction.toLowerCase() !== DESC ? ASC : DESC;
         self.clearSortingData(col);
         if(!self.config.useExternalSorting){
-            window.kg.sortService.Sort(self.sortInfo.peek(), self.sortedData);
-        } else {
-            self.config.sortInfo(self.sortInfo.peek());
+            window.kg.sortService.Sort({ column: col, direction: direction }, self.sortedData);
         }
+		
+		// Reduce number of events
+		self.sortInfo.peek().column = col.field;
+		self.sortInfo.peek().direction = direction;
+		self.sortInfo.notifySubscribers();
+		
         self.lastSortedColumn = col;
         self.isSorting = false;
     };
@@ -1685,23 +1729,39 @@ window.kg.SearchProvider = function (grid) {
 
                 for (var i = 0, len = searchConditions.length; i < len; i++) {
                     var condition = searchConditions[i];
-                    //Search entire row
+					
+                    // Search entire row
                     if (!condition.column) {
-                        for (var prop in item) {
-                            if (item.hasOwnProperty(prop)) {
-                                var pVal = ko.utils.unwrapObservable(item[prop]);
-                                if (pVal && condition.regex.test(pVal.toString())) {
+						var cols = grid.columns();
+						for (var i = 0; i < cols.length; ++i) {
+							var col = cols[i];
+							if (item.hasOwnProperty(col.field)) {
+								var val = ko.utils.unwrapObservable(item[col.field]);
+								if (col.cellFilter) {
+									val = col.cellFilter(val);
+								}
+                                if (val && condition.regex.test(val.toString())) {
                                     return true;
                                 }
                             }
                         }
                         return false;
                     }
-                    //Search by column.
-                    var field = ko.utils.unwrapObservable(item[condition.column]) || ko.utils.unwrapObservable(item[self.fieldMap[condition.columnDisplay]]);
-                    if (!field || !condition.regex.test(field.toString())) {
-                        return false;
-                    }
+					
+                    // Search by column
+					var col = ko.utils.arrayFirst(grid.columns(), function (c) {
+						return c.field == condition.column
+							|| c.field == self.fieldMap[condition.columnDisplay];
+					});
+					if (col) {
+						var val = ko.utils.unwrapObservable(item[col.field]);
+						if (col.cellFilter) {
+							val = col.cellFilter(val);
+						}
+						if (!val || !condition.regex.test(val.toString())) {
+							return false;
+						}
+					}
                 }
                 return true;
             }));
@@ -2115,6 +2175,8 @@ window.kg.sortService = {
         unwrappedData.sort(function (itemA, itemB) {
             var propA = window.kg.utils.evalProperty(itemA, col.field);
             var propB = window.kg.utils.evalProperty(itemB, col.field);
+			if (col.cellFilter) propA = col.cellFilter(propA);
+			if (col.cellFilter) propB = col.cellFilter(propB);
             // we want to force nulls and such to the bottom when we sort... which effectively is "greater than"
             if (!propB && !propA) {
                 return 0;
@@ -2124,11 +2186,11 @@ window.kg.sortService = {
                 return -1;
             }
             //made it this far, we don't have to worry about null & undefined
-            if (direction === ASC) {
-                return sortFn(propA, propB);
-            } else {
-                return 0 - sortFn(propA, propB);
+            var res = sortFn(propA, propB, direction)|0;
+            if (direction !== ASC) {
+                res = 0 - res;
             }
+			return res;
         });
         data(unwrappedData);
         return;
@@ -2146,24 +2208,29 @@ window.kg.sortService = {
 /***********************************************
 * FILE: ..\src\classes\DomUtilityService.js
 ***********************************************/
-var getWidths = function () {
-    var $testContainer = $('<div></div>');
-    $testContainer.appendTo('body');
-    // 1. Run all the following measurements on startup!
-    //measure Scroll Bars
-    $testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
-    $testContainer.append('<div style="height: 400px; width: 400px;"></div>');
-    window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
-    window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
-    $testContainer.empty();
-    //clear styles
-    $testContainer.attr('style', '');
-    //measure letter sizes using a pretty typical font size and fat font-family
-    $testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
-    window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
-    $testContainer.remove();
-};
+var $testContainer = null;
 window.kg.domUtilityService = {
+	init: function () {
+		if ($testContainer) {
+			return;
+		}
+		$testContainer = $('<div></div>');
+		$testContainer.appendTo('body');
+		// 1. Run all the following measurements on startup!
+		//measure Scroll Bars
+		$testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
+		$testContainer.append('<div style="height: 400px; width: 400px;"></div>');
+		window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
+		window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
+		$testContainer.empty();
+		//clear styles
+		$testContainer.attr('style', '');
+		//measure letter sizes using a pretty typical font size and fat font-family
+		$testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
+		window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
+		$testContainer.remove();
+	},
+	
     AssignGridContainers: function (rootEl, grid) {
         grid.$root = $(rootEl);
         //Headers
@@ -2228,5 +2295,4 @@ window.kg.domUtilityService = {
     ScrollW: 17, // default in IE, Chrome, & most browsers
     LetterW: 10
 };
-getWidths();
 }(window));

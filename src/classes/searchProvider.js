@@ -20,23 +20,39 @@
 
                 for (var i = 0, len = searchConditions.length; i < len; i++) {
                     var condition = searchConditions[i];
-                    //Search entire row
+					
+                    // Search entire row
                     if (!condition.column) {
-                        for (var prop in item) {
-                            if (item.hasOwnProperty(prop)) {
-                                var pVal = ko.utils.unwrapObservable(item[prop]);
-                                if (pVal && condition.regex.test(pVal.toString())) {
+						var cols = grid.columns();
+						for (var i = 0; i < cols.length; ++i) {
+							var col = cols[i];
+							if (item.hasOwnProperty(col.field)) {
+								var val = ko.utils.unwrapObservable(item[col.field]);
+								if (col.cellFilter) {
+									val = col.cellFilter(val);
+								}
+                                if (val && condition.regex.test(val.toString())) {
                                     return true;
                                 }
                             }
                         }
                         return false;
                     }
-                    //Search by column.
-                    var field = ko.utils.unwrapObservable(item[condition.column]) || ko.utils.unwrapObservable(item[self.fieldMap[condition.columnDisplay]]);
-                    if (!field || !condition.regex.test(field.toString())) {
-                        return false;
-                    }
+					
+                    // Search by column
+					var col = ko.utils.arrayFirst(grid.columns(), function (c) {
+						return c.field == condition.column
+							|| c.field == self.fieldMap[condition.columnDisplay];
+					});
+					if (col) {
+						var val = ko.utils.unwrapObservable(item[col.field]);
+						if (col.cellFilter) {
+							val = col.cellFilter(val);
+						}
+						if (!val || !condition.regex.test(val.toString())) {
+							return false;
+						}
+					}
                 }
                 return true;
             }));

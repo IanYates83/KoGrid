@@ -277,6 +277,21 @@ window.kg.Grid = function (options) {
         self.maxCanvasHt(self.calcMaxCanvasHeight());
         self.searchProvider.evalFilter();
         self.refreshDomSizes();
+		
+		// Sort config subscriber and initial use
+		if (self.sortInfo) {
+			var sortObs = function () {
+				if (!self.isSorting) {
+					var si = self.sortInfo.peek();
+					if (si) {
+						self.sortData(si.column, si.direction);
+					}
+				}
+			};
+			
+			self.sortInfo.subscribe(sortObs);
+			setTimeout(sortObs, 0);
+		}
     };
     self.prevScrollTop = 0;
     self.prevScrollIndex = 0;
@@ -321,18 +336,37 @@ window.kg.Grid = function (options) {
         window.kg.domUtilityService.BuildStyles(self);
     };
     self.sortData = function (col, direction) {
-        // if external sorting is being used, do nothing.
         self.isSorting = true;
-        self.sortInfo({
-            column: col,
-            direction: direction
-        });
+		if (typeof col !== 'object') {
+			// Can specify sort column by index or name
+			if (typeof col === 'number') {
+				col = self.columns()[col];
+			} else {
+				col = ko.utils.arrayFirst(self.columns(), function (el) {
+					return (el.field === col);
+				});
+			}
+			
+			// Trick column to do the sort
+			if (col) {
+				col.sortDirection(direction.toLowerCase() !== DESC ? DESC : ASC);
+				col.sort();
+			}
+			return;
+		}
+		
+        // if external sorting is being used, do nothing.
+		direction = direction.toLowerCase() !== DESC ? ASC : DESC;
         self.clearSortingData(col);
         if(!self.config.useExternalSorting){
-            window.kg.sortService.Sort(self.sortInfo.peek(), self.sortedData);
-        } else {
-            self.config.sortInfo(self.sortInfo.peek());
+            window.kg.sortService.Sort({ column: col, direction: direction }, self.sortedData);
         }
+		
+		// Reduce number of events
+		self.sortInfo.peek().column = col.field;
+		self.sortInfo.peek().direction = direction;
+		self.sortInfo.notifySubscribers();
+		
         self.lastSortedColumn = col;
         self.isSorting = false;
     };
