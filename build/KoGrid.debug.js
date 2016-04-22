@@ -2,7 +2,7 @@
 * koGrid JavaScript Library
 * Authors: https://github.com/ericmbarnard/koGrid/blob/master/README.md
 * License: MIT (http://www.opensource.org/licenses/mit-license.php)
-* Compiled At: 12/19/2012 10:15:47
+* Compiled At: 04/22/2016 07:28:01
 ***********************************************/
 
 (function (window) {
@@ -259,6 +259,7 @@ ko.bindingHandlers['koGrid'] = (function () {
             grid.$userViewModel = bindingContext.$data;
             ko.applyBindings(grid, gridElem[0]);
             //walk the element's graph and the correct properties on the grid
+			window.kg.domUtilityService.init();
             window.kg.domUtilityService.AssignGridContainers(elem, grid);
             grid.configureColumnWidths();
             grid.refreshDomSizes();
@@ -271,6 +272,15 @@ ko.bindingHandlers['koGrid'] = (function () {
                 }
             });
             window.kg.domUtilityService.BuildStyles(grid);
+			
+			// Async layout columns after render
+			setTimeout(function () {
+				window.kg.domUtilityService.UpdateGridLayout(grid);
+				if (grid.config.maintainColumnRatios) {
+					grid.configureColumnWidths();
+				}
+			}, 0);
+			
             return { controlsDescendantBindings: true };
         }
     };
@@ -518,7 +528,7 @@ window.kg.Column = function (config, grid) {
     }
     self.sortDirection = ko.observable(undefined);
     self.sortingAlgorithm = colDef.sortFn;
-    self.headerClass = ko.observable(colDef.headerClass);
+    self.headerClass = ko.observable(colDef.headerClass || '');
     self.headerCellTemplate = colDef.headerCellTemplate || window.kg.defaultHeaderCellTemplate();
     self.cellTemplate = colDef.cellTemplate || window.kg.defaultCellTemplate();
     if (colDef.cellTemplate && !TEMPLATE_REGEXP.test(colDef.cellTemplate)) {
@@ -2146,24 +2156,29 @@ window.kg.sortService = {
 /***********************************************
 * FILE: ..\src\classes\DomUtilityService.js
 ***********************************************/
-var getWidths = function () {
-    var $testContainer = $('<div></div>');
-    $testContainer.appendTo('body');
-    // 1. Run all the following measurements on startup!
-    //measure Scroll Bars
-    $testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
-    $testContainer.append('<div style="height: 400px; width: 400px;"></div>');
-    window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
-    window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
-    $testContainer.empty();
-    //clear styles
-    $testContainer.attr('style', '');
-    //measure letter sizes using a pretty typical font size and fat font-family
-    $testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
-    window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
-    $testContainer.remove();
-};
+var $testContainer = null;
 window.kg.domUtilityService = {
+	init: function () {
+		if ($testContainer) {
+			return;
+		}
+		$testContainer = $('<div></div>');
+		$testContainer.appendTo('body');
+		// 1. Run all the following measurements on startup!
+		//measure Scroll Bars
+		$testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
+		$testContainer.append('<div style="height: 400px; width: 400px;"></div>');
+		window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
+		window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
+		$testContainer.empty();
+		//clear styles
+		$testContainer.attr('style', '');
+		//measure letter sizes using a pretty typical font size and fat font-family
+		$testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
+		window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
+		$testContainer.remove();
+	},
+	
     AssignGridContainers: function (rootEl, grid) {
         grid.$root = $(rootEl);
         //Headers
@@ -2228,5 +2243,4 @@ window.kg.domUtilityService = {
     ScrollW: 17, // default in IE, Chrome, & most browsers
     LetterW: 10
 };
-getWidths();
 }(window));

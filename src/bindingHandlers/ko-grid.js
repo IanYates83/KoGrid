@@ -29,6 +29,7 @@
             grid.$userViewModel = bindingContext.$data;
             ko.applyBindings(grid, gridElem[0]);
             //walk the element's graph and the correct properties on the grid
+			window.kg.domUtilityService.init();
             window.kg.domUtilityService.AssignGridContainers(elem, grid);
             grid.configureColumnWidths();
             grid.refreshDomSizes();
@@ -41,6 +42,15 @@
                 }
             });
             window.kg.domUtilityService.BuildStyles(grid);
+			
+			// Async layout columns after render
+			setTimeout(function () {
+				window.kg.domUtilityService.UpdateGridLayout(grid);
+				if (grid.config.maintainColumnRatios) {
+					grid.configureColumnWidths();
+				}
+			}, 0);
+			
             return { controlsDescendantBindings: true };
         }
     };

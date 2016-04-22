@@ -5,24 +5,29 @@
 /// <reference path="../navigation.js"/>
 /// <reference path="../utils.js"/>
 /// <reference path="../classes/range.js"/>
-var getWidths = function () {
-    var $testContainer = $('<div></div>');
-    $testContainer.appendTo('body');
-    // 1. Run all the following measurements on startup!
-    //measure Scroll Bars
-    $testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
-    $testContainer.append('<div style="height: 400px; width: 400px;"></div>');
-    window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
-    window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
-    $testContainer.empty();
-    //clear styles
-    $testContainer.attr('style', '');
-    //measure letter sizes using a pretty typical font size and fat font-family
-    $testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
-    window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
-    $testContainer.remove();
-};
+var $testContainer = null;
 window.kg.domUtilityService = {
+	init: function () {
+		if ($testContainer) {
+			return;
+		}
+		$testContainer = $('<div></div>');
+		$testContainer.appendTo('body');
+		// 1. Run all the following measurements on startup!
+		//measure Scroll Bars
+		$testContainer.height(100).width(100).css("position", "absolute").css("overflow", "scroll");
+		$testContainer.append('<div style="height: 400px; width: 400px;"></div>');
+		window.kg.domUtilityService.ScrollH = ($testContainer.height() - $testContainer[0].clientHeight);
+		window.kg.domUtilityService.ScrollW = ($testContainer.width() - $testContainer[0].clientWidth);
+		$testContainer.empty();
+		//clear styles
+		$testContainer.attr('style', '');
+		//measure letter sizes using a pretty typical font size and fat font-family
+		$testContainer.append('<span style="font-family: Verdana, Helvetica, Sans-Serif; font-size: 14px;"><strong>M</strong></span>');
+		window.kg.domUtilityService.LetterW = $testContainer.children().first().width();
+		$testContainer.remove();
+	},
+	
     AssignGridContainers: function (rootEl, grid) {
         grid.$root = $(rootEl);
         //Headers
@@ -87,4 +92,3 @@ window.kg.domUtilityService = {
     ScrollW: 17, // default in IE, Chrome, & most browsers
     LetterW: 10
 };
-getWidths();
